@@ -5,6 +5,10 @@
 ![CLI](https://img.shields.io/badge/interface-CLI--only-blue)
 ![License](https://img.shields.io/badge/license-MIT-yellow)
 ![Telemetry](https://img.shields.io/badge/telemetry-none-brightgreen)
+[![GitHub Stars](https://img.shields.io/github/stars/AbdulWaseaDev/browser-profile-tool?style=social)](https://github.com/AbdulWaseaDev/browser-profile-tool/stargazers)
+[![GitHub Follow](https://img.shields.io/github/followers/AbdulWaseaDev?style=social)](https://github.com/AbdulWaseaDev)
+
+Built by [**@AbdulWaseaDev**](https://github.com/AbdulWaseaDev). If this tool is useful to you, please consider **starring** the repo, **sharing** it, and **following** for future updates.
 
 A terminal-only CLI for launching isolated, persistent, fingerprinted
 Chromium browser profiles behind proxies — one profile per real,
@@ -221,3 +225,9 @@ node src/cli.js --help
 ```
 
 No build step; it's plain CommonJS.
+
+## Author
+
+[**@AbdulWaseaDev**](https://github.com/AbdulWaseaDev)
+
+If this project was useful to you, please ⭐ **star** the repo, 🔗 **share** it with others who might need it, and 👤 **follow** for future updates.
