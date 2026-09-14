@@ -3,7 +3,7 @@
 ![Node](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 ![CLI](https://img.shields.io/badge/interface-CLI--only-blue)
-![License](https://img.shields.io/badge/license-UNLICENSED-red)
+![License](https://img.shields.io/badge/license-MIT-yellow)
 ![Telemetry](https://img.shields.io/badge/telemetry-none-brightgreen)
 
 A terminal-only CLI for launching isolated, persistent, fingerprinted

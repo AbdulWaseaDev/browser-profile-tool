@@ -2,7 +2,7 @@
   "name": "browser-profile-tool",
   "version": "1.0.0",
   "description": "CLI tool for launching isolated, persistent, fingerprinted Chromium profiles behind proxies, one profile per real existing account.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true,
   "bin": {
     "bpt": "./src/cli.js"
