@@ -120,6 +120,13 @@ or a fresh proxy-provider IP assignment can each independently break
 what previously looked like a consistent identity; the audit is the
 cheapest way to catch that before it costs you a real account.
 
+**One profile, one running instance at a time.** Chromium (and so
+fingerprint-chromium) only allows a single process to run against a
+given `userDataDir` at once. If you run `bpt launch <name>` and leave
+the window open, a later `bpt launch`/`bpt profile audit` on that same
+profile will fail with a CDP-timeout error — close the existing window
+first. This is normal Chromium behavior, not a bug.
+
 ## `bpt profile audit` — what it actually checks
 
 This is a deliberate, manual, point-in-time substitute for continuous

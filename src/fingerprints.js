@@ -17,6 +17,17 @@ const crypto = require('crypto');
  * base (closest kernel lineage) and layer CDP-level emulation + a UA
  * override on top in launcher.js. This is called out again there and in
  * the README so it isn't mistaken for a natively-supported mode.
+ *
+ * Deliberately no `brandVersion` field: an earlier version of this file hardcoded
+ * --fingerprint-brand-version, which only overrides the Client Hints API
+ * (navigator.userAgentData), not the actual navigator.userAgent/appVersion string —
+ * that always reflects the real underlying binary's version. A hardcoded value here
+ * drifts out of sync with the real UA every time the fingerprint-chromium binary is
+ * updated, producing a UA-vs-Client-Hints version mismatch — confirmed live via
+ * CreepJS (UA said Chrome 148, userAgentData said the hardcoded 128) — which is one
+ * of the most well-known bot-detection heuristics. Leaving --fingerprint-brand-version
+ * unset lets Client Hints derive from the real binary version too, so it always
+ * matches the UA string automatically, regardless of which build is in binaryPath.
  */
 const TEMPLATES = {
   'windows-chrome-1080p': {
@@ -24,7 +35,6 @@ const TEMPLATES = {
     platform: 'windows',
     platformVersion: '10.0',
     brand: 'Chrome',
-    brandVersion: '128',
     hardwareConcurrency: 8,
     screen: { width: 1920, height: 1080, colorDepth: 24, pixelRatio: 1 },
     gpuVendor: 'Google Inc. (Intel)',
@@ -36,7 +46,6 @@ const TEMPLATES = {
     platform: 'windows',
     platformVersion: '10.0',
     brand: 'Chrome',
-    brandVersion: '128',
     hardwareConcurrency: 12,
     screen: { width: 2560, height: 1440, colorDepth: 24, pixelRatio: 1 },
     gpuVendor: 'Google Inc. (NVIDIA)',
@@ -48,7 +57,6 @@ const TEMPLATES = {
     platform: 'macos',
     platformVersion: '14.5',
     brand: 'Chrome',
-    brandVersion: '128',
     hardwareConcurrency: 8,
     screen: { width: 2560, height: 1600, colorDepth: 30, pixelRatio: 2 },
     gpuVendor: 'Google Inc. (Apple)',
@@ -60,7 +68,6 @@ const TEMPLATES = {
     platform: 'linux',
     platformVersion: '',
     brand: 'Chrome',
-    brandVersion: '128',
     hardwareConcurrency: 8,
     screen: { width: 1920, height: 1080, colorDepth: 24, pixelRatio: 1 },
     gpuVendor: 'Google Inc. (Mesa)',
@@ -72,7 +79,6 @@ const TEMPLATES = {
     platform: 'linux', // see module comment — Android is not a native --fingerprint-platform value
     platformVersion: '',
     brand: 'Chrome',
-    brandVersion: '128',
     hardwareConcurrency: 8,
     screen: { width: 412, height: 915, colorDepth: 24, pixelRatio: 2.625 },
     gpuVendor: 'Google Inc. (Qualcomm)',

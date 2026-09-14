@@ -235,8 +235,12 @@ async function launchProfile(profile, config, opts = {}) {
   if (!cdpReady || exitedEarly) {
     if (anonymizedUrl) await proxyChain.closeAnonymizedProxy(anonymizedUrl, true).catch(() => {});
     throw new Error(
-      `fingerprint-chromium did not expose a CDP endpoint on port ${debugPort} in time. ` +
-      `Check that binaryPath ("${config.binaryPath}") is correct and executable.`
+      `fingerprint-chromium did not expose a CDP endpoint on port ${debugPort} in time.\n` +
+      `Most likely cause: this profile's userDataDir ("${userDataDir}") is already open in another ` +
+      `fingerprint-chromium/Chromium window or process — Chromium only allows one instance per profile ` +
+      `directory. Close any existing window for "${profile.name}" (including one left open from a previous ` +
+      `"bpt launch") and try again.\n` +
+      `If that's not it, check that binaryPath ("${config.binaryPath}") is correct and executable.`
     );
   }
 
