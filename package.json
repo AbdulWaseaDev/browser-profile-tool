@@ -1,0 +1,24 @@
+{
+  "name": "browser-profile-tool",
+  "version": "1.0.0",
+  "description": "CLI tool for launching isolated, persistent, fingerprinted Chromium profiles behind proxies, one profile per real existing account.",
+  "license": "UNLICENSED",
+  "private": true,
+  "bin": {
+    "bpt": "./src/cli.js"
+  },
+  "main": "./src/cli.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/cli.js"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "js-yaml": "^4.1.0",
+    "playwright-core": "^1.47.0",
+    "proxy-chain": "^2.5.3",
+    "get-port": "^5.1.1"
+  }
+}
