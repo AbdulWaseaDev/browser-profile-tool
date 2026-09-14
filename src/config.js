@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
+const { getTemplate } = require('./fingerprints');
 
 const ALLOWED_SCHEMES = ['http', 'socks5'];
 const ALLOWED_DEVICE_TYPES = ['desktop', 'mobile'];
@@ -92,6 +93,29 @@ function validateProfile(profile, index, seenNames) {
     fail(`Profile "${profile.name}": deviceType must be one of ${ALLOWED_DEVICE_TYPES.join(', ')} (got "${profile.deviceType}")`);
   }
   profile.deviceType = deviceType;
+
+  // Actual runtime behavior (src/launcher.js) is driven entirely by the *template's own*
+  // deviceType, not this field — deviceType here only picks a default template at profile
+  // creation and drives the "DEVICE" column in `profile list`. If the two disagree (e.g.
+  // deviceType: mobile hand-edited onto a profile still pointing at a desktop template),
+  // the profile would silently launch with desktop behavior despite claiming to be mobile —
+  // exactly the kind of field mismatch this tool exists to prevent, so it's a hard error
+  // rather than a silent fallback.
+  let templateDeviceType;
+  try {
+    templateDeviceType = getTemplate(profile.fingerprint.template).deviceType;
+  } catch (err) {
+    fail(`Profile "${profile.name}": ${err.message}`);
+  }
+  if (templateDeviceType !== deviceType) {
+    fail(
+      `Profile "${profile.name}": deviceType is "${deviceType}" but fingerprint.template ` +
+      `"${profile.fingerprint.template}" is a ${templateDeviceType} template — they must match. ` +
+      `Either change deviceType to "${templateDeviceType}", or pick a ${deviceType} template ` +
+      `(run "bpt profile add"/"bpt profile import" to generate a matching template+seed pair ` +
+      `rather than hand-editing an existing profile's device type).`
+    );
+  }
 
   const webrtcPolicy = profile.webrtcPolicy || 'proxy-only';
   if (!ALLOWED_WEBRTC_POLICIES.includes(webrtcPolicy)) {
