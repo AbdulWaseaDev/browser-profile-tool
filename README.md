@@ -19,6 +19,38 @@ operates and reused indefinitely. This tool does not generate
 synthetic or unrelated identities, has no platform-specific logic, and
 has no GUI, team sharing, telemetry, or auto-update of any kind.
 
+## Verification status
+
+Every command has been run end-to-end against a real fingerprint-chromium
+binary and a real paid proxy, not just written to spec:
+
+- `profile add`, `list`, `remove` (with and without `--purge`), `import`,
+  `export`, `proxy test`, `engine update`, `config path` — all exercised
+  directly.
+- `launch` — spawns the real binary, connects over CDP, opens a real
+  window through the real proxy, and cleans up correctly on `Ctrl+C`
+  (`SIGINT`).
+- `profile audit` — all five checks pass against a real profile
+  (`navigator.webdriver`, timezone, locale, WebRTC leak, CreepJS load).
+- One real bug was found this way and fixed: a hardcoded fingerprint
+  brand version caused a `navigator.userAgent` vs. `navigator.userAgentData`
+  mismatch, confirmed live via CreepJS and corrected in `src/fingerprints.js`.
+
+Known, non-blocking gaps, left as-is rather than silently assumed fixed:
+
+- `deviceType: mobile` (the Android-emulation CDP layer) has not been run
+  against a real profile — implemented, unexercised.
+- No automated test suite; everything above was verified through manual,
+  one-off runs during development, not a repeatable CI check.
+- `bpt proxy test` against a *completely* unroutable proxy can take
+  noticeably longer than its nominal timeout to fail (extra time is
+  spent inside `proxy-chain`'s own connection attempt, outside this
+  tool's timeout window) — it does fail correctly, just not always
+  promptly.
+- Launching two profiles concurrently has not been tested (should be
+  safe — separate `userDataDir`s and `get-port`-assigned debug ports —
+  but unverified in practice).
+
 ## Before you trust any profile: proxy stability
 
 **Read this before configuring anything.** This tool's entire design
@@ -40,6 +72,19 @@ run, which is useful for catching a dead or misconfigured proxy — it
 is not proof that the same IP is being handed out every launch. Run it
 a few times over a few minutes if you're unsure whether the plan is
 sticky.
+
+**Stability and reputation are two different properties — check both.**
+A proxy can be perfectly *stable* (same IP every launch) and still be
+*burned* — datacenter IP ranges are commonly pre-flagged in Cloudflare/
+Akamai/DataDome reputation databases regardless of anything the browser
+does. In real testing, a $0.9/week datacenter proxy triggered a hard
+Cloudflare block on one site and a JS challenge on another, independent
+of fingerprint quality — the proxy's own `whatismyipaddress.com` lookup
+showed its ISP labeled outright as `Data Center/Transit`. If your real
+target site keeps hard-blocking a profile that passes `bpt profile
+audit` cleanly, the fix is usually a **residential or mobile** proxy
+tier from your provider, not a tool setting — no fingerprint template
+fixes a blocklisted IP.
 
 ## Setup
 
@@ -183,7 +228,7 @@ fingerprint-chromium patches fingerprinting surfaces at the engine
 | Fonts | Native (seed-driven; template font lists in `src/fingerprints.js` are informational/documentation, not separately injected) |
 | Screen resolution | Partially native — this tool sets the real Chromium window size via `--window-size` to match the template, which is a real (not spoofed) window size |
 | Hardware concurrency | Native, via `--fingerprint-hardware-concurrency` |
-| Navigator properties (platform, UA brand) | Native, via `--fingerprint-platform` / `--fingerprint-brand` / `--fingerprint-brand-version` |
+| Navigator properties (platform, UA brand) | Native, via `--fingerprint-platform` / `--fingerprint-brand`. **`--fingerprint-brand-version` is deliberately never set** — it only overrides `navigator.userAgentData` (Client Hints), not the real `navigator.userAgent`/`appVersion` string, which always reflects the actual binary version. A hardcoded brand version previously shipped in `src/fingerprints.js` and caused a live, confirmed UA-vs-Client-Hints mismatch (UA said Chrome 148, Client Hints said the hardcoded 128) — a well-known bot-detection signal. Leaving it unset keeps both values naturally in sync on every fingerprint-chromium release. |
 | Timezone | Native, via `--timezone` |
 | Locale | Native, via `--lang` / `--accept-lang` |
 | WebRTC IP leak | Native, via `--disable-non-proxied-udp` (see below) |
