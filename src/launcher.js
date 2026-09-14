@@ -123,6 +123,65 @@ async function waitForCdp(port, timeoutMs = 20000) {
 }
 
 /**
+ * Shared override function, injected both via addInitScript (so it applies to every
+ * future navigation) and evaluated directly against already-open pages. addInitScript
+ * alone is not enough: it only fires on documents created *after* it's registered, so the
+ * initial tab fingerprint-chromium opens on launch (already loaded by the time we connect)
+ * would otherwise never get it — confirmed live: without the direct-evaluate pass below,
+ * the very first tab kept reporting the host's real media devices. Idempotent, so running
+ * it twice on the same page (once live, once again via addInitScript on next navigation)
+ * is harmless.
+ */
+function applyFingerprintOverrides({ counts, mobile, uaToken }) {
+  // --- Media device enumeration override ---
+  const makeDevice = (kind, index) => ({
+    deviceId: `bpt-${kind}-${index}`,
+    groupId: `bpt-group-${kind}`,
+    kind,
+    label: '',
+    toJSON() { return this; },
+  });
+  const fakeDevices = [];
+  for (const [kind, count] of Object.entries(counts)) {
+    for (let i = 0; i < count; i++) fakeDevices.push(makeDevice(kind, i));
+  }
+  if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+    navigator.mediaDevices.enumerateDevices = () => Promise.resolve(fakeDevices);
+  }
+
+  // --- Battery Status API override ---
+  if (navigator.getBattery) {
+    navigator.getBattery = () => Promise.resolve({
+      charging: true,
+      chargingTime: 0,
+      dischargingTime: Infinity,
+      level: 1,
+      addEventListener() {},
+      removeEventListener() {},
+      dispatchEvent() { return true; },
+    });
+  }
+
+  // --- Mobile UA/platform token override (best-effort; native platform flag has no
+  //     "android" value, see fingerprints.js for why) ---
+  if (mobile && uaToken) {
+    const ua = navigator.userAgent.replace(/\([^)]*\)/, `(Linux; ${uaToken})`);
+    Object.defineProperty(navigator, 'userAgent', { get: () => ua });
+    Object.defineProperty(navigator, 'platform', { get: () => 'Linux armv8l' });
+    Object.defineProperty(navigator, 'maxTouchPoints', { get: () => 5 });
+  }
+}
+
+async function applyOverridesToExistingPages(context, overrideArgs) {
+  for (const page of context.pages()) {
+    await page.evaluate(applyFingerprintOverrides, overrideArgs).catch(() => {
+      // Page may not have finished its initial navigation yet, in which case the
+      // addInitScript registration covers it on its next navigation anyway.
+    });
+  }
+}
+
+/**
  * Inject overrides for fingerprint surfaces fingerprint-chromium does not cover natively:
  * media device enumeration and the Battery Status API. Both are known gaps in engine-level
  * fingerprint forks (see README "Fingerprint coverage" table) — without this, a profile
@@ -137,49 +196,14 @@ async function applyCdpOverrides(context, profile, template) {
     ? { videoinput: 1, audioinput: 1, audiooutput: 0 }
     : { videoinput: 1, audioinput: 1, audiooutput: 1 };
 
-  await context.addInitScript(({ counts, mobile, uaToken }) => {
-    // --- Media device enumeration override ---
-    const makeDevice = (kind, index) => ({
-      deviceId: `bpt-${kind}-${index}`,
-      groupId: `bpt-group-${kind}`,
-      kind,
-      label: '',
-      toJSON() { return this; },
-    });
-    const fakeDevices = [];
-    for (const [kind, count] of Object.entries(counts)) {
-      for (let i = 0; i < count; i++) fakeDevices.push(makeDevice(kind, i));
-    }
-    if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-      navigator.mediaDevices.enumerateDevices = () => Promise.resolve(fakeDevices);
-    }
-
-    // --- Battery Status API override ---
-    if (navigator.getBattery) {
-      navigator.getBattery = () => Promise.resolve({
-        charging: true,
-        chargingTime: 0,
-        dischargingTime: Infinity,
-        level: 1,
-        addEventListener() {},
-        removeEventListener() {},
-        dispatchEvent() { return true; },
-      });
-    }
-
-    // --- Mobile UA/platform token override (best-effort; native platform flag has no
-    //     "android" value, see fingerprints.js for why) ---
-    if (mobile && uaToken) {
-      const ua = navigator.userAgent.replace(/\([^)]*\)/, `(Linux; ${uaToken})`);
-      Object.defineProperty(navigator, 'userAgent', { get: () => ua });
-      Object.defineProperty(navigator, 'platform', { get: () => 'Linux armv8l' });
-      Object.defineProperty(navigator, 'maxTouchPoints', { get: () => 5 });
-    }
-  }, {
+  const overrideArgs = {
     counts: deviceCounts,
     mobile: template.deviceType === 'mobile',
     uaToken: template.mobileUserAgentOsToken || null,
-  });
+  };
+
+  await context.addInitScript(applyFingerprintOverrides, overrideArgs);
+  await applyOverridesToExistingPages(context, overrideArgs);
 
   if (template.deviceType === 'mobile') {
     for (const page of context.pages()) {
@@ -189,16 +213,36 @@ async function applyCdpOverrides(context, profile, template) {
   }
 }
 
+/**
+ * CDP sessions used for Emulation.setDeviceMetricsOverride are kept open for the life of
+ * the page rather than detached right after sending the command. Detaching immediately
+ * reverts the override in this Chromium build — confirmed live: devicePixelRatio and touch
+ * emulation both silently fell back to non-mobile defaults when the session was detached
+ * right after being set. The session is closed naturally when the browser connection
+ * itself closes during cleanup(), so no separate teardown is needed here.
+ *
+ * `mobile: false` here is deliberate, not a typo. Confirmed live against fingerprint-chromium
+ * 148 in headless mode: passing `mobile: true` to setDeviceMetricsOverride causes Chromium to
+ * ignore the requested width/height entirely and substitute some other internally-computed
+ * size (observed: two different requested widths, 412 and 375, both produced an identical,
+ * unrelated 981 — a real engine bug/quirk in this build's headless mobile-emulation path, not
+ * something fixable from here). `mobile: false` with the same width/height/deviceScaleFactor
+ * honors the requested values exactly. Touch behavior is still forced via
+ * setTouchEmulationEnabled and the navigator.maxTouchPoints override in
+ * applyFingerprintOverrides, so the tradeoff is losing native `'ontouchstart' in window`
+ * detection (reports false) in exchange for a correct, consistent viewport size — the more
+ * important property for not looking like an impossible device. If a future
+ * fingerprint-chromium/Chromium build fixes the underlying mobile-emulation bug, revisit this.
+ */
 async function applyMobileEmulation(page, template) {
   const session = await page.context().newCDPSession(page);
   await session.send('Emulation.setDeviceMetricsOverride', {
     width: template.screen.width,
     height: template.screen.height,
     deviceScaleFactor: template.screen.pixelRatio,
-    mobile: true,
+    mobile: false,
   });
   await session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
-  await session.detach().catch(() => {});
 }
 
 /**

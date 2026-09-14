@@ -35,11 +35,24 @@ binary and a real paid proxy, not just written to spec:
 - One real bug was found this way and fixed: a hardcoded fingerprint
   brand version caused a `navigator.userAgent` vs. `navigator.userAgentData`
   mismatch, confirmed live via CreepJS and corrected in `src/fingerprints.js`.
+- `deviceType: mobile` — run end-to-end against the real binary and fixed
+  two real bugs found in the process: (1) the CDP session used for
+  `Emulation.setDeviceMetricsOverride` was being detached immediately
+  after use, which reverted the override; (2) `context.addInitScript()`
+  doesn't run on a page that's already loaded before it's registered, so
+  the UA/media-device overrides silently never applied to the initial
+  tab. Both fixed in `src/launcher.js`. A third issue was found and
+  worked around, not fully fixed: passing `mobile: true` to
+  `Emulation.setDeviceMetricsOverride` causes this fingerprint-chromium
+  build to ignore the requested viewport size entirely in headless mode
+  (confirmed: two different requested widths both produced the same
+  wrong result) — worked around by using `mobile: false` with the same
+  dimensions, which keeps the viewport correct at the cost of
+  `'ontouchstart' in window` reading `false` instead of `true`. See the
+  comment above `applyMobileEmulation` in `src/launcher.js`.
 
 Known, non-blocking gaps, left as-is rather than silently assumed fixed:
 
-- `deviceType: mobile` (the Android-emulation CDP layer) has not been run
-  against a real profile — implemented, unexercised.
 - No automated test suite; everything above was verified through manual,
   one-off runs during development, not a repeatable CI check.
 - `bpt proxy test` against a *completely* unroutable proxy can take
@@ -234,7 +247,7 @@ fingerprint-chromium patches fingerprinting surfaces at the engine
 | WebRTC IP leak | Native, via `--disable-non-proxied-udp` (see below) |
 | **Media device enumeration** | **Not covered natively.** This tool layers a `navigator.mediaDevices.enumerateDevices` override via a Playwright `addInitScript` CDP-level injection so the real host's camera/mic device list is never exposed. |
 | **Battery Status API** | **Not covered natively.** Same mechanism — `navigator.getBattery` is overridden to return fixed plausible values instead of the real host's battery state. |
-| Mobile (Android) platform | **Not a native option** — `--fingerprint-platform` only accepts `windows`, `linux`, or `macos` (confirmed in the fork's README; there is no `android` value). `deviceType: mobile` uses a `linux` base plus a CDP `Emulation.setDeviceMetricsOverride`/touch-emulation layer and a `navigator.userAgent`/`platform`/`maxTouchPoints` override, all in `src/launcher.js`. Treat mobile profiles as best-effort, not equivalent in rigor to the desktop templates, until you've audited one yourself. |
+| Mobile (Android) platform | **Not a native option** — `--fingerprint-platform` only accepts `windows`, `linux`, or `macos` (confirmed in the fork's README; there is no `android` value). `deviceType: mobile` uses a `linux` base plus a CDP `Emulation.setDeviceMetricsOverride`/touch-emulation layer and a `navigator.userAgent`/`platform`/`maxTouchPoints` override, all in `src/launcher.js` — confirmed live to correctly produce the right viewport, pixel ratio, touch point count, UA, and platform. One known remaining gap: `'ontouchstart' in window` reads `false` instead of `true`, a side effect of working around a real viewport bug in this Chromium build when `mobile: true` is set (see comment on `applyMobileEmulation`). Treat mobile profiles as best-effort, not equivalent in rigor to the desktop templates, until you've audited one yourself. |
 
 Anywhere a flag's exact behavior was inferred rather than read
 directly off the fork's docs, that's called out in a comment at the
